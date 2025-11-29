@@ -10,14 +10,30 @@ type Site = {
     created_at: string;
 };
 
+type Domain = {
+    id: string;
+    hostname: string;
+    site_id: string;
+    status?: string | null;
+    verification_method?: string | null;
+    verification_value?: string | null;
+    created_at?: string;
+};
+
 export default function ManageSites() {
     const [sites, setSites] = useState<Site[]>([]);
+    const [domains, setDomains] = useState<Domain[]>([]);
     const [loading, setLoading] = useState(true);
+    const [domainsLoading, setDomainsLoading] = useState(true);
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [editing, setEditing] = useState<Site | null>(null);
     const [editSubdomain, setEditSubdomain] = useState("");
     const [editFile, setEditFile] = useState<File | null>(null);
     const [saving, setSaving] = useState(false);
+    const [domainModalSite, setDomainModalSite] = useState<Site | null>(null);
+    const [newDomain, setNewDomain] = useState("");
+    const [addingDomain, setAddingDomain] = useState(false);
+    const [dnsTip, setDnsTip] = useState<string | null>(null);
     const router = useRouter();
 
     useEffect(() => {
@@ -32,6 +48,7 @@ export default function ManageSites() {
 
             // Load sites
             await loadSites(data.session.access_token);
+            await loadDomains(data.session.access_token);
         }
         init();
     }, [router]);
@@ -69,6 +86,35 @@ export default function ManageSites() {
         }
     }
 
+    async function loadDomains(token?: string) {
+        setDomainsLoading(true);
+        try {
+            const authToken = token || accessToken;
+            if (!authToken) {
+                setDomains([]);
+                return;
+            }
+            const res = await fetch("/api/domains", {
+                headers: {
+                    Authorization: `Bearer ${authToken}`,
+                },
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) {
+                console.error("Failed to load domains", body);
+                setDomains([]);
+                return;
+            }
+            const parsed = Array.isArray(body) ? body : [];
+            setDomains(parsed);
+        } catch (err) {
+            console.error("Failed to load domains", err);
+            setDomains([]);
+        } finally {
+            setDomainsLoading(false);
+        }
+    }
+
     async function deleteSite(domain: string, id: string) {
         if (!confirm(`Delete ${domain}?`)) return;
 
@@ -92,6 +138,12 @@ export default function ManageSites() {
         setEditing(site);
         setEditSubdomain(site.domain);
         setEditFile(null);
+    }
+
+    function openDomains(site: Site) {
+        setDomainModalSite(site);
+        setNewDomain("");
+        setDnsTip(null);
     }
 
     async function saveEdit() {
@@ -145,6 +197,126 @@ export default function ManageSites() {
         setEditing(null);
     }
 
+    async function addCustomDomain() {
+        if (!domainModalSite) return;
+        if (!newDomain.trim()) {
+            alert("Enter a hostname (e.g. example.com)");
+            return;
+        }
+        if (!accessToken) {
+            alert("Session missing. Please log in again.");
+            router.push("/login");
+            return;
+        }
+        setAddingDomain(true);
+        setDnsTip(null);
+        const res = await fetch("/api/domains", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+                siteId: domainModalSite.id,
+                hostname: newDomain.trim(),
+            }),
+        });
+        const body = await res.json().catch(() => null);
+        setAddingDomain(false);
+
+        if (!res.ok) {
+            alert(body?.error || "Failed to add domain");
+            return;
+        }
+
+        if (body?.domain) {
+            setDomains((prev) => [body.domain as Domain, ...prev]);
+        }
+        const dnsText = formatDnsTip(body);
+        setDnsTip(dnsText);
+        setNewDomain("");
+    }
+
+    async function refreshDomain(id: string) {
+        if (!accessToken) {
+            alert("Session missing. Please log in again.");
+            router.push("/login");
+            return;
+        }
+        const res = await fetch("/api/domains", {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ id }),
+        });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) {
+            alert(body?.error || "Failed to refresh");
+            return;
+        }
+        if (body?.domain) {
+            setDomains((prev) =>
+                prev.map((d) => (d.id === id ? (body.domain as Domain) : d))
+            );
+            const dnsText = formatDnsTip(body);
+            setDnsTip(dnsText);
+        }
+    }
+
+    async function deleteDomain(id: string) {
+        if (!confirm("Remove this custom domain?")) return;
+        if (!accessToken) {
+            alert("Session missing. Please log in again.");
+            router.push("/login");
+            return;
+        }
+        const res = await fetch("/api/domains", {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ id }),
+        });
+        if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            alert(body?.error || "Failed to delete domain");
+            return;
+        }
+        setDomains((prev) => prev.filter((d) => d.id !== id));
+    }
+
+    function formatDnsTip(body: any) {
+        const record = body?.dnsRecords?.[0];
+        if (record?.cname_name && record?.cname_target) {
+            return `Create CNAME ${record.cname_name} -> ${record.cname_target}`;
+        }
+        if (body?.cnameTarget && body?.domain?.hostname) {
+            return `Point ${body.domain.hostname} to ${body.cnameTarget}`;
+        }
+        if (record?.txt_name && record?.txt_value) {
+            return `Add TXT ${record.txt_name} with value ${record.txt_value}`;
+        }
+        return null;
+    }
+
+    function renderStatusBadge(status?: string | null) {
+        const text = status || "pending";
+        const isActive = text.toLowerCase() === "active";
+        const bg = isActive ? "#16a34a" : "#f59e0b";
+        return (
+            <span style={{ ...styles.badge, background: bg }}>
+                {text}
+            </span>
+        );
+    }
+
+    function siteDomains(siteId: string) {
+        return domains.filter((d) => d.site_id === siteId);
+    }
+
     return (
         <div style={styles.page}>
             <div style={styles.container}>
@@ -193,10 +365,16 @@ export default function ManageSites() {
                                             View
                                         </a>
                                             <button
-                                                onClick={() => openEdit(site)}
+                                            onClick={() => openEdit(site)}
                                                 style={styles.editBtn}
                                             >
                                                 Edit
+                                            </button>
+                                            <button
+                                                onClick={() => openDomains(site)}
+                                                style={styles.secondaryBtn}
+                                            >
+                                                Domains
                                             </button>
                                             <button
                                                 onClick={() => deleteSite(site.domain, site.id)}
@@ -248,6 +426,93 @@ export default function ManageSites() {
                             >
                                 Cancel
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {domainModalSite && (
+                <div style={styles.modalBackdrop}>
+                    <div style={styles.modalWide}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <h3 style={{ margin: 0 }}>Custom domains for {domainModalSite.domain}</h3>
+                            <button
+                                onClick={() => { setDomainModalSite(null); setDnsTip(null); }}
+                                style={styles.cancelBtn}
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <p style={{ color: "#9ca3af", marginTop: "8px" }}>
+                            Point your DNS to the worker (CNAME to edge) and wait for Cloudflare SSL to activate.
+                        </p>
+                        <div style={{ marginTop: "16px", marginBottom: "12px" }}>
+                            <label style={styles.label}>New hostname</label>
+                            <input
+                                value={newDomain}
+                                onChange={(e) => setNewDomain(e.target.value)}
+                                style={styles.input}
+                                placeholder="example.com"
+                            />
+                            <button
+                                onClick={addCustomDomain}
+                                style={styles.primaryBtn}
+                                disabled={addingDomain}
+                            >
+                                {addingDomain ? "Adding..." : "Add domain"}
+                            </button>
+                        </div>
+                        {dnsTip && (
+                            <div style={styles.dnsBox}>
+                                <strong>DNS:</strong> {dnsTip}
+                            </div>
+                        )}
+                        <div style={{ marginTop: "12px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                                <span style={{ color: "#9ca3af" }}>
+                                    Existing domains {domainsLoading ? "(loading...)" : ""}
+                                </span>
+                                <button
+                                    onClick={() => loadDomains()}
+                                    style={styles.smallGhost}
+                                >
+                                    Refresh list
+                                </button>
+                            </div>
+                            {siteDomains(domainModalSite.id).length === 0 ? (
+                                <p style={{ color: "#9ca3af", marginTop: "6px" }}>No custom domains yet.</p>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                    {siteDomains(domainModalSite.id).map((d) => (
+                                        <div key={d.id} style={styles.domainRow}>
+                                            <div>
+                                                <div style={{ fontWeight: 600 }}>{d.hostname}</div>
+                                                <div style={{ color: "#9ca3af", fontSize: "12px" }}>
+                                                    {renderStatusBadge(d.status)}
+                                                    {d.verification_method && d.verification_value && (
+                                                        <span style={{ marginLeft: "8px" }}>
+                                                            {d.verification_method.toUpperCase()}: {d.verification_value}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div style={{ display: "flex", gap: "8px" }}>
+                                                <button
+                                                    onClick={() => refreshDomain(d.id)}
+                                                    style={styles.smallGhost}
+                                                >
+                                                    Refresh
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteDomain(d.id)}
+                                                    style={styles.dangerOutline}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -329,6 +594,15 @@ const styles = {
         cursor: "pointer",
         fontSize: "14px",
     },
+    secondaryBtn: {
+        background: "#1f2937",
+        border: "1px solid #374151",
+        color: "#fff",
+        borderRadius: "6px",
+        padding: "6px 12px",
+        cursor: "pointer",
+        fontSize: "14px",
+    },
     deleteBtn: {
         background: "#ff4242",
         border: "none",
@@ -388,5 +662,55 @@ const styles = {
         borderRadius: "8px",
         cursor: "pointer",
         fontSize: "14px",
+    },
+    modalWide: {
+        background: "#0f1115",
+        padding: "20px",
+        borderRadius: "12px",
+        maxWidth: "720px",
+        width: "100%",
+        border: "1px solid #222",
+    },
+    dnsBox: {
+        background: "#111827",
+        border: "1px solid #1f2937",
+        color: "#e5e7eb",
+        padding: "10px 12px",
+        borderRadius: "8px",
+        marginTop: "8px",
+    },
+    domainRow: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "12px",
+        border: "1px solid #1f2937",
+        borderRadius: "10px",
+        background: "#0b0d12",
+    },
+    badge: {
+        display: "inline-block",
+        padding: "3px 8px",
+        borderRadius: "999px",
+        fontSize: "12px",
+        color: "#fff",
+    },
+    smallGhost: {
+        background: "transparent",
+        border: "1px solid #374151",
+        color: "#fff",
+        padding: "6px 10px",
+        borderRadius: "6px",
+        cursor: "pointer",
+        fontSize: "12px",
+    },
+    dangerOutline: {
+        background: "transparent",
+        border: "1px solid #f87171",
+        color: "#f87171",
+        padding: "6px 10px",
+        borderRadius: "6px",
+        cursor: "pointer",
+        fontSize: "12px",
     },
 };

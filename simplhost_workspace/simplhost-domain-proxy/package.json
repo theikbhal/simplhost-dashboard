@@ -1,0 +1,39 @@
+{
+  "name": "simplhost-domain-proxy",
+  "version": "1.0.0",
+  "description": "Sync simplhost customer custom domains from Supabase to a Cloud Run service.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "echo \"Add a linter\" && exit 0",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theikbhal/simplhost-domain-proxy.git"
+  },
+  "keywords": [
+    "simplhost",
+    "cloud-run",
+    "supabase",
+    "domains"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/theikbhal/simplhost-domain-proxy/issues"
+  },
+  "homepage": "https://github.com/theikbhal/simplhost-domain-proxy#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.86.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "googleapis": "^140.0.1",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0"
+  }
+}
