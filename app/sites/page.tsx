@@ -17,6 +17,9 @@ export default function ManageSites() {
     const [editing, setEditing] = useState<Site | null>(null);
     const [editSubdomain, setEditSubdomain] = useState("");
     const [editFile, setEditFile] = useState<File | null>(null);
+    const [editSourceType, setEditSourceType] = useState<"file" | "html" | "text">("file");
+    const [editHtmlContent, setEditHtmlContent] = useState("");
+    const [editTextContent, setEditTextContent] = useState("");
     const [saving, setSaving] = useState(false);
     const router = useRouter();
 
@@ -92,6 +95,9 @@ export default function ManageSites() {
         setEditing(site);
         setEditSubdomain(site.domain);
         setEditFile(null);
+        setEditSourceType("file");
+        setEditHtmlContent("");
+        setEditTextContent("");
     }
 
     async function saveEdit() {
@@ -107,12 +113,27 @@ export default function ManageSites() {
             return;
         }
 
+        const preparedFile = (() => {
+            if (editSourceType === "file") return editFile;
+            if (editSourceType === "html") {
+                if (!editHtmlContent.trim()) return null;
+                return new File([editHtmlContent], "index.html", { type: "text/html" });
+            }
+            if (!editTextContent.trim()) return null;
+            return new File([editTextContent], "content.txt", { type: "text/plain" });
+        })();
+
+        if (editSourceType !== "file" && !preparedFile) {
+            alert("Add content for the selected input type.");
+            return;
+        }
+
         setSaving(true);
         const form = new FormData();
         form.append("id", editing.id);
         form.append("subdomain", editSubdomain.trim());
-        if (editFile) {
-            form.append("file", editFile);
+        if (preparedFile) {
+            form.append("file", preparedFile);
         }
 
         const res = await fetch("/api/sites", {
@@ -223,15 +244,56 @@ export default function ManageSites() {
                             style={styles.input}
                             placeholder="Subdomain (no spaces)"
                         />
-                        <label style={styles.label}>Upload new ZIP / file (optional)</label>
-                        <input
-                            type="file"
-                            accept=".zip,.html"
-                            onChange={(e) => setEditFile(e.target.files?.[0] || null)}
-                            style={styles.input}
-                        />
+                        <label style={styles.label}>New content (optional)</label>
+                        <div style={styles.toggleGroup}>
+                            <button
+                                type="button"
+                                onClick={() => setEditSourceType("file")}
+                                style={editSourceType === "file" ? styles.toggleActive : styles.toggle}
+                            >
+                                Upload file
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setEditSourceType("html")}
+                                style={editSourceType === "html" ? styles.toggleActive : styles.toggle}
+                            >
+                                Paste HTML
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setEditSourceType("text")}
+                                style={editSourceType === "text" ? styles.toggleActive : styles.toggle}
+                            >
+                                Paste text
+                            </button>
+                        </div>
+                        {editSourceType === "file" && (
+                            <input
+                                type="file"
+                                accept="*/*"
+                                onChange={(e) => setEditFile(e.target.files?.[0] || null)}
+                                style={styles.input}
+                            />
+                        )}
+                        {editSourceType === "html" && (
+                            <textarea
+                                placeholder="Paste your HTML code here..."
+                                value={editHtmlContent}
+                                onChange={(e) => setEditHtmlContent(e.target.value)}
+                                style={styles.textarea}
+                            />
+                        )}
+                        {editSourceType === "text" && (
+                            <textarea
+                                placeholder="Paste plain text (will be saved as content.txt)"
+                                value={editTextContent}
+                                onChange={(e) => setEditTextContent(e.target.value)}
+                                style={styles.textarea}
+                            />
+                        )}
                         <p style={{ fontSize: "12px", color: "#aaa" }}>
-                            You can: 1) rename only, 2) redeploy with a new file only, or 3) do both at once.
+                            You can rename only, redeploy with new content, or do both together.
                         </p>
                         <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
                             <button
@@ -388,5 +450,41 @@ const styles = {
         borderRadius: "8px",
         cursor: "pointer",
         fontSize: "14px",
+    },
+    textarea: {
+        width: "100%",
+        minHeight: "160px",
+        padding: "12px",
+        borderRadius: "10px",
+        background: "#111",
+        border: "1px solid #333",
+        color: "#fff",
+        marginBottom: "8px",
+        fontFamily: "monospace",
+        fontSize: "14px",
+    },
+    toggleGroup: {
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: "8px",
+        marginBottom: "10px",
+    },
+    toggle: {
+        background: "#1f2937",
+        color: "#cbd5e1",
+        border: "1px solid #334155",
+        borderRadius: "10px",
+        padding: "10px",
+        cursor: "pointer",
+        fontSize: "12px",
+    },
+    toggleActive: {
+        background: "#3b82f6",
+        color: "#fff",
+        border: "1px solid "#3b82f6",
+        borderRadius: "10px",
+        padding: "10px",
+        cursor: "pointer",
+        fontSize: "12px",
     },
 };

@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 export default function Dashboard() {
     const [subdomain, setSubdomain] = useState("");
     const [file, setFile] = useState<File | null>(null);
+    const [sourceType, setSourceType] = useState<"file" | "html" | "text">("file");
+    const [htmlContent, setHtmlContent] = useState("");
+    const [textContent, setTextContent] = useState("");
     const [loading, setLoading] = useState(false);
     const [liveURL, setLiveURL] = useState("");
     const [userName, setUserName] = useState("");
@@ -27,9 +30,23 @@ export default function Dashboard() {
         protect();
     }, []);
 
+    function buildUploadFile(): File | null {
+        if (sourceType === "file") {
+            return file;
+        }
+        if (sourceType === "html") {
+            if (!htmlContent.trim()) return null;
+            return new File([htmlContent], "index.html", { type: "text/html" });
+        }
+        if (!textContent.trim()) return null;
+        return new File([textContent], "content.txt", { type: "text/plain" });
+    }
+
     async function deploySite() {
-        if (!file || !subdomain) {
-            alert("Enter subdomain and choose a ZIP");
+        const uploadFile = buildUploadFile();
+
+        if (!uploadFile || !subdomain) {
+            alert("Enter subdomain and add content (file, HTML, or text)");
             return;
         }
 
@@ -44,7 +61,7 @@ export default function Dashboard() {
 
         const form = new FormData();
         form.append("subdomain", subdomain);
-        form.append("file", file);
+        form.append("file", uploadFile);
 
         const res = await fetch("/api/sites", {
             method: "POST",
@@ -61,6 +78,9 @@ export default function Dashboard() {
             setLiveURL(data.url);
             setSubdomain("");
             setFile(null);
+            setHtmlContent("");
+            setTextContent("");
+            setSourceType("file");
         } else {
             alert("Upload failed");
         }
@@ -86,12 +106,56 @@ export default function Dashboard() {
                     style={styles.input}
                 />
 
-                <input
-                    type="file"
-                    accept=".zip"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    style={styles.input}
-                />
+                <div style={styles.toggleGroup}>
+                    <button
+                        type="button"
+                        onClick={() => setSourceType("file")}
+                        style={sourceType === "file" ? styles.toggleActive : styles.toggle}
+                    >
+                        Upload file (zip/html/any)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSourceType("html")}
+                        style={sourceType === "html" ? styles.toggleActive : styles.toggle}
+                    >
+                        Paste HTML
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSourceType("text")}
+                        style={sourceType === "text" ? styles.toggleActive : styles.toggle}
+                    >
+                        Paste text
+                    </button>
+                </div>
+
+                {sourceType === "file" && (
+                    <input
+                        type="file"
+                        accept="*/*"
+                        onChange={(e) => setFile(e.target.files?.[0] || null)}
+                        style={styles.input}
+                    />
+                )}
+
+                {sourceType === "html" && (
+                    <textarea
+                        placeholder="Paste your HTML code here..."
+                        value={htmlContent}
+                        onChange={(e) => setHtmlContent(e.target.value)}
+                        style={styles.textarea}
+                    />
+                )}
+
+                {sourceType === "text" && (
+                    <textarea
+                        placeholder="Paste plain text (will be saved as content.txt)"
+                        value={textContent}
+                        onChange={(e) => setTextContent(e.target.value)}
+                        style={styles.textarea}
+                    />
+                )}
 
                 <button onClick={deploySite} style={styles.button} disabled={loading}>
                     {loading ? "Deploying..." : "Deploy Site"}
@@ -134,6 +198,42 @@ const styles = {
         border: "1px solid #333",
         color: "white",
         marginBottom: "12px",
+    },
+    textarea: {
+        width: "100%",
+        minHeight: "180px",
+        padding: "14px",
+        borderRadius: "12px",
+        background: "#000",
+        border: "1px solid #333",
+        color: "white",
+        marginBottom: "12px",
+        fontFamily: "monospace",
+        fontSize: "14px",
+    },
+    toggleGroup: {
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: "8px",
+        marginBottom: "12px",
+    },
+    toggle: {
+        background: "#1f2937",
+        color: "#cbd5e1",
+        border: "1px solid #334155",
+        borderRadius: "10px",
+        padding: "10px",
+        cursor: "pointer",
+        fontSize: "13px",
+    },
+    toggleActive: {
+        background: "#3b82f6",
+        color: "#fff",
+        border: "1px solid #3b82f6",
+        borderRadius: "10px",
+        padding: "10px",
+        cursor: "pointer",
+        fontSize: "13px",
     },
 
     button: {
