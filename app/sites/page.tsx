@@ -100,6 +100,15 @@ export default function ManageSites() {
         setEditTextContent("");
     }
 
+    function textToHtml(text: string, title: string) {
+        const escaped = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br>");
+        return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:system-ui, sans-serif;background:#0b0d12;color:#e5e7eb;max-width:720px;margin:40px auto;padding:24px;line-height:1.6;}pre{white-space:pre-wrap;}</style></head><body><pre>${escaped}</pre></body></html>`;
+    }
+
     async function saveEdit() {
         if (!editing) return;
         if (!accessToken) {
@@ -120,7 +129,8 @@ export default function ManageSites() {
                 return new File([editHtmlContent], "index.html", { type: "text/html" });
             }
             if (!editTextContent.trim()) return null;
-            return new File([editTextContent], "content.txt", { type: "text/plain" });
+            const html = textToHtml(editTextContent, editSubdomain || "site");
+            return new File([html], "index.html", { type: "text/html" });
         })();
 
         if (editSourceType !== "file" && !preparedFile) {
@@ -176,7 +186,7 @@ export default function ManageSites() {
                 ) : sites.length === 0 ? (
                     <div style={styles.empty}>
                         <p style={{ fontSize: "16px", opacity: 0.7 }}>No sites deployed yet.</p>
-                        <a href="/dashboard" style={styles.deployLink}>Deploy your first site →</a>
+                        <a href="/dashboard" style={styles.deployLink}>Deploy your first site -></a>
                     </div>
                 ) : (
                     <table style={styles.table}>
@@ -481,7 +491,7 @@ const styles = {
     toggleActive: {
         background: "#3b82f6",
         color: "#fff",
-        border: "1px solid "#3b82f6",
+        border: "1px solid #3b82f6",
         borderRadius: "10px",
         padding: "10px",
         cursor: "pointer",

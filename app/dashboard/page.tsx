@@ -30,6 +30,15 @@ export default function Dashboard() {
         protect();
     }, []);
 
+    function textToHtml(text: string) {
+        const escaped = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br>");
+        return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${subdomain || "site"}</title><style>body{font-family:system-ui, sans-serif;background:#0b0d12;color:#e5e7eb;max-width:720px;margin:40px auto;padding:24px;line-height:1.6;}pre{white-space:pre-wrap;}</style></head><body><pre>${escaped}</pre></body></html>`;
+    }
+
     function buildUploadFile(): File | null {
         if (sourceType === "file") {
             return file;
@@ -39,7 +48,8 @@ export default function Dashboard() {
             return new File([htmlContent], "index.html", { type: "text/html" });
         }
         if (!textContent.trim()) return null;
-        return new File([textContent], "content.txt", { type: "text/plain" });
+        const html = textToHtml(textContent);
+        return new File([html], "index.html", { type: "text/html" });
     }
 
     async function deploySite() {
